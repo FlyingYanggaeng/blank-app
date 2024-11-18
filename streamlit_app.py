@@ -33,54 +33,90 @@ def get_dong_codes_for_city(city_name, sigungu_name=None, json_path='district.js
     return None, None
  
 def get_apt_list(dong_code):
-    # 지역코드 앞 5자리만 사용
-    area_code = str(dong_code)[:5]
-    down_url = f'https://new.land.naver.com/api/regions/complexes?cortarNo={area_code}&realEstateType=APT&order='
-    
-    header = {
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Authorization": "",
-        "Host": "new.land.naver.com",
-        "Referer": f"https://new.land.naver.com/complexes?ms={area_code}",
-        "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120"',
-        "Sec-Ch-Ua-Mobile": "?0",
-        "Sec-Ch-Ua-Platform": '"Windows"',
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-origin",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    # API 요청
+    api_url = 'https://new.land.naver.com/api/complexes/single-markers/2.0'
+    params = {
+        'cortarNo': str(dong_code),
+        'zoom': '16',
+        'priceType': 'RETAIL',
+        'markerId': '',
+        'markerType': '',
+        'selectedComplexNo': '',
+        'selectedComplexBuildingNo': '',
+        'fakeComplexMarker': '',
+        'realEstateType': 'APT:ABYG:JGC:PRE',
+        'tradeType': '',
+        'tag': ':::::::', 
+        'rentPriceMin': '0',
+        'rentPriceMax': '900000000',
+        'priceMin': '0',
+        'priceMax': '900000000',
+        'areaMin': '0',
+        'areaMax': '900000000',
+        'oldBuildYears': '',
+        'recentlyBuildYears': '',
+        'minHouseHoldCount': '',
+        'maxHouseHoldCount': '',
+        'showArticle': 'false',
+        'sameAddressGroup': 'false',
+        'minMaintenanceCost': '',
+        'maxMaintenanceCost': '',
+        'directions': '',
+        # 좌표값은 동적으로 조정될 수 있음
+        'leftLon': '127.0335801',
+        'rightLon': '127.0610459',
+        'topLat': '37.5229391',
+        'bottomLat': '37.5118764',
+        'isPresale': 'true'
     }
- 
+    
+    headers = {
+        'Accept': '*/*',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Host': 'new.land.naver.com',
+        'Referer': 'https://new.land.naver.com/complexes',
+        'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origin',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Connection': 'keep-alive'
+    }
+
     try:
-        print(f"Requesting URL: {down_url}")  # URL 출력
-        r = requests.get(down_url, headers=header)
-        r.raise_for_status()
-        print(f"Response status: {r.status_code}")  # 응답 상태 코드 출력
-        print(f"Response headers: {r.headers}")  # 응답 헤더 출력
+        session = requests.Session()
+        # 먼저 메인 페이지 방문
+        session.get('https://new.land.naver.com/complexes', headers=headers)
         
-        r.encoding = "utf-8-sig"
-        data = r.json()
-        print(f"Response data: {data}")  # 응답 데이터 출력
- 
-        if 'complexList' in data and isinstance(data['complexList'], list):
-            df = pd.DataFrame(data['complexList'])
-            required_columns = ['complexNo', 'complexName', 'buildYear', 'totalHouseholdCount', 'areaSize', 'price', 'address', 'floor']
- 
+        # API 요청
+        response = session.get(api_url, params=params, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        
+        # 데이터 처리
+        if isinstance(data, list) and data:
+            df = pd.DataFrame(data)
+            required_columns = ['complexNo', 'complexName', 'totalHouseholdCount', 
+                              'dealCount', 'leaseCount', 'rentCount', 'minPrice', 'maxPrice',
+                              'dealPriceMin', 'dealPriceMax', 'leasePriceMin', 'leasePriceMax',
+                              'rentPriceMin', 'rentPriceMax']
+            
+            # 필요한 컬럼이 없는 경우 None으로 채움
             for col in required_columns:
                 if col not in df.columns:
                     df[col] = None
- 
+            
+            st.success(f"총 {len(df)}개의 아파트 정보를 찾았습니다.")
             return df[required_columns]
         else:
-            st.warning(f"해당 지역({area_code})에 아파트 정보가 없습니다.")
+            st.warning(f"해당 지역({dong_code})에 아파트 정보가 없습니다.")
             return pd.DataFrame(columns=required_columns)
- 
+        
     except requests.exceptions.RequestException as e:
         st.error(f"데이터 요청 중 오류 발생: {e}")
-        if 'r' in locals():
-            print(f"API Response: {r.text}")
         return pd.DataFrame(columns=required_columns)
     except Exception as e:
         st.error(f"처리 중 오류 발생: {e}")
