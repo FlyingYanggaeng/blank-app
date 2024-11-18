@@ -36,17 +36,21 @@ def get_dong_codes_for_city(city_name, sigungu_name=None, json_path='district.js
 def get_apt_list(dong_code):
     down_url = f'https://new.land.naver.com/api/regions/complexes?cortarNo={dong_code}&realEstateType=APT&order='
     header = {
-        "Accept-Encoding": "gzip",
+        "Accept": "*/*",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Authorization": "",
         "Host": "new.land.naver.com",
-        "Referer": "https://new.land.naver.com/complexes/102378",
+        "Referer": "https://new.land.naver.com/",
         "Sec-Fetch-Dest": "empty",
         "Sec-Fetch-Mode": "cors",
         "Sec-Fetch-Site": "same-origin",
-        "User-Agent": "Mozilla/5.0"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
  
     try:
         r = requests.get(down_url, headers=header)
+        r.raise_for_status()  # 오류 발생시 예외 발생
         r.encoding = "utf-8-sig"
         data = r.json()
  
@@ -60,11 +64,15 @@ def get_apt_list(dong_code):
  
             return df[required_columns]
         else:
-            st.warning(f"No data found for {dong_code}.")
+            st.warning(f"해당 지역({dong_code})에 아파트 정보가 없습니다.")
             return pd.DataFrame(columns=required_columns)
  
+    except requests.exceptions.RequestException as e:
+        st.error(f"데이터 요청 중 오류 발생: {e}")
+        print(f"API Response: {r.text}")  # 응답 내용 출력
+        return pd.DataFrame(columns=required_columns)
     except Exception as e:
-        st.error(f"Error fetching data for {dong_code}: {e}")
+        st.error(f"처리 중 오류 발생: {e}")
         return pd.DataFrame(columns=required_columns)
  
 # 아파트 코드로 상세 정보 가져오기
