@@ -32,16 +32,21 @@ def get_dong_codes_for_city(city_name, sigungu_name=None, json_path='district.js
                 return sigungu_codes, dong_codes
     return None, None
  
-# 아파트 코드 리스트 가져오기
 def get_apt_list(dong_code):
-    down_url = f'https://new.land.naver.com/api/regions/complexes?cortarNo={dong_code}&realEstateType=APT&order='
+    # 지역코드 앞 5자리만 사용
+    area_code = str(dong_code)[:5]
+    down_url = f'https://new.land.naver.com/api/regions/complexes?cortarNo={area_code}&realEstateType=APT&order='
+    
     header = {
-        "Accept": "*/*",
+        "Accept": "application/json, text/plain, */*",
         "Accept-Encoding": "gzip, deflate, br",
         "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
         "Authorization": "",
         "Host": "new.land.naver.com",
-        "Referer": "https://new.land.naver.com/",
+        "Referer": f"https://new.land.naver.com/complexes?ms={area_code}",
+        "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
         "Sec-Fetch-Dest": "empty",
         "Sec-Fetch-Mode": "cors",
         "Sec-Fetch-Site": "same-origin",
@@ -49,10 +54,15 @@ def get_apt_list(dong_code):
     }
  
     try:
+        print(f"Requesting URL: {down_url}")  # URL 출력
         r = requests.get(down_url, headers=header)
-        r.raise_for_status()  # 오류 발생시 예외 발생
+        r.raise_for_status()
+        print(f"Response status: {r.status_code}")  # 응답 상태 코드 출력
+        print(f"Response headers: {r.headers}")  # 응답 헤더 출력
+        
         r.encoding = "utf-8-sig"
         data = r.json()
+        print(f"Response data: {data}")  # 응답 데이터 출력
  
         if 'complexList' in data and isinstance(data['complexList'], list):
             df = pd.DataFrame(data['complexList'])
@@ -64,12 +74,13 @@ def get_apt_list(dong_code):
  
             return df[required_columns]
         else:
-            st.warning(f"해당 지역({dong_code})에 아파트 정보가 없습니다.")
+            st.warning(f"해당 지역({area_code})에 아파트 정보가 없습니다.")
             return pd.DataFrame(columns=required_columns)
  
     except requests.exceptions.RequestException as e:
         st.error(f"데이터 요청 중 오류 발생: {e}")
-        print(f"API Response: {r.text}")  # 응답 내용 출력
+        if 'r' in locals():
+            print(f"API Response: {r.text}")
         return pd.DataFrame(columns=required_columns)
     except Exception as e:
         st.error(f"처리 중 오류 발생: {e}")
@@ -140,7 +151,6 @@ def get_apt_details(apt_code):
         st.error(f"Error fetching details for {apt_code}: {e}")
         return []
  
-# 아파트 정보를 수집하는 함수
 def collect_apt_info_for_city(city_name, sigungu_name, dong_name=None, json_path='district.json'):
     sigungu_codes, dong_list = get_dong_codes_for_city(city_name, sigungu_name, json_path)
  
@@ -156,6 +166,28 @@ def collect_apt_info_for_city(city_name, sigungu_name, dong_name=None, json_path
  
     if dong_name and dong_name != '전체':
         dong_code_name_map = {k: v for k, v in dong_code_name_map.items() if v == dong_name}
+ 
+    for dong_code, dong_name in dong_code_name_map.items():
+        placeholder.write(f"{dong_name} ({dong_code}) - 수집중입니다.")
+        
+        # 지역코드 처리
+        processed_code = str(dong_code)[:5]  # 앞 5자리만 사용
+        apt_codes = get_apt_list(processed_code)
+ 
+        if not apt_codes.empty:
+            for _, apt_info in apt_codes.iterrows():
+                apt_code = apt_info['complexNo']
+                apt_name = apt_info['complexName']
+                placeholder.write(f"{apt_name} ({apt_code}) - 수집중입니다.")
+                listings = get_apt_details(apt_code)
+                
+                if listings:
+                    for listing in listings:
+                        listing['dong_code'] = dong_code
+                        listing['dong_name'] = dong_name
+                        all_apt_data.append(listing)
+        else:
+            st.warning(f"No apartment codes found for {processed_code}")
  
     for dong_code, dong_name in dong_code_name_map.items():
         placeholder.write(f"{dong_name} ({dong_code}) - 수집중입니다.")
